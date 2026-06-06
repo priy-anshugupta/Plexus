@@ -36,7 +36,7 @@ export default function BlastRadiusGraph({
   links,
   vulnerabilityNodeId,
 }: BlastRadiusGraphProps) {
-  const fgRef = useRef<any>();
+  const fgRef = useRef<any>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(vulnerabilityNodeId || null);
   const [highlightNodes, setHighlightNodes] = useState<Set<string>>(new Set());
   const [highlightLinks, setHighlightLinks] = useState<Set<string>>(new Set());
