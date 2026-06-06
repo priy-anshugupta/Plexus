@@ -133,16 +133,124 @@ class ScannerService:
                                 code_content=code_content,
                             )
 
-                            # 3. Analyze code using AST rules to generate findings
-                            file_findings = self._analyze_file(
-                                relative_path=relative_path,
+                            # 3. Analyze code using AI Agent Pipeline (falls back to static rules if offline)
+                            from app.agents import run_analysis_pipeline
+
+                            file_lines = code_content.splitlines()
+                            def get_snippet(start: int, end: int | None = None) -> str:
+                                start_idx = max(0, start - 1)
+                                end_idx = min(len(file_lines), (end or start))
+                                return "\n".join(file_lines[start_idx:end_idx])
+
+                            pipeline_result = run_analysis_pipeline(
+                                repository_id=repo_record.id,
+                                file_path=relative_path,
                                 code_content=code_content,
                                 language=lang,
-                                scan_id=scan.id,
-                                repo_id=repo_record.id,
-                                ast_data=ast_data,
                             )
-                            findings_found.extend(file_findings)
+
+                            if pipeline_result.get("status") == "success":
+                                agent_findings = pipeline_result.get("findings", [])
+                                agent_comments = pipeline_result.get("review_comments", [])
+                                fix_suggestions = pipeline_result.get("fix_suggestions", [])
+
+                                # A. Map security findings
+                                for f in agent_findings:
+                                    line_start = f.get("line_start", 1)
+                                    line_end = f.get("line_end", line_start)
+
+                                    # Match suggestion
+                                    matching_sug = None
+                                    for s in fix_suggestions:
+                                        if s.get("finding_title") == f.get("title") and s.get("line_start") == line_start:
+                                            matching_sug = s
+                                            break
+
+                                    sug_text = f.get("suggestion")
+                                    if matching_sug:
+                                        sug_text = (
+                                            f"### Recommended Fix:\n"
+                                            f"```\n{matching_sug['corrected_code']}\n```\n\n"
+                                            f"**Explanation:** {matching_sug['explanation']}"
+                                        )
+
+                                    findings_found.append(
+                                        Finding(
+                                            scan_id=scan.id,
+                                            repository_id=repo_record.id,
+                                            file_path=relative_path,
+                                            line_start=line_start,
+                                            line_end=line_end,
+                                            severity=Severity(f.get("severity", "info").lower()),
+                                            category=FindingCategory.SECURITY,
+                                            status=FindingStatus.OPEN,
+                                            title=f.get("title", "Security Vulnerability"),
+                                            description=f.get("description", ""),
+                                            suggestion=sug_text,
+                                            code_snippet=get_snippet(line_start, line_end),
+                                            rule_id=f.get("rule_id"),
+                                            confidence_score=f.get("confidence_score", 0.85),
+                                            is_ai_generated=f.get("is_ai_generated", False),
+                                        )
+                                    )
+
+                                # B. Map code quality review comments
+                                for c in agent_comments:
+                                    line_start = c.get("line", 1)
+
+                                    # Match suggestion
+                                    matching_sug = None
+                                    for s in fix_suggestions:
+                                        if s.get("finding_title") == c.get("title") and s.get("line_start") == line_start:
+                                            matching_sug = s
+                                            break
+
+                                    sug_text = c.get("suggestion")
+                                    if matching_sug:
+                                        sug_text = (
+                                            f"### Recommended Refactoring:\n"
+                                            f"```\n{matching_sug['corrected_code']}\n```\n\n"
+                                            f"**Explanation:** {matching_sug['explanation']}"
+                                        )
+
+                                    severity_str = c.get("severity", "info").lower()
+                                    if severity_str == "error":
+                                        sev_val = Severity.HIGH
+                                    elif severity_str == "warning":
+                                        sev_val = Severity.MEDIUM
+                                    else:
+                                        sev_val = Severity.INFO
+
+                                    findings_found.append(
+                                        Finding(
+                                            scan_id=scan.id,
+                                            repository_id=repo_record.id,
+                                            file_path=relative_path,
+                                            line_start=line_start,
+                                            line_end=line_start,
+                                            severity=sev_val,
+                                            category=FindingCategory.CODE_QUALITY,
+                                            status=FindingStatus.OPEN,
+                                            title=c.get("title", "Code Quality Issue"),
+                                            description=c.get("description", ""),
+                                            suggestion=sug_text,
+                                            code_snippet=get_snippet(line_start, line_start),
+                                            rule_id=None,
+                                            confidence_score=0.8,
+                                            is_ai_generated=c.get("is_ai_generated", False),
+                                        )
+                                    )
+                            else:
+                                logger.warning("AI Pipeline execution failed for %s. Falling back to static rules.", relative_path)
+                                file_findings = self._analyze_file(
+                                    relative_path=relative_path,
+                                    code_content=code_content,
+                                    language=lang,
+                                    scan_id=scan.id,
+                                    repo_id=repo_record.id,
+                                    ast_data=ast_data,
+                                )
+                                findings_found.extend(file_findings)
                         except Exception as exc:
                             logger.warning("Failed to scan file %s: %s", relative_path, exc)
 
