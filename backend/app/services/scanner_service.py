@@ -18,6 +18,8 @@ from app.models.finding import Finding, FindingCategory, FindingStatus, Severity
 from app.models.scan import Scan, ScanStatus
 from app.services.git_service import GitService
 from app.services.parser_service import ParserService
+from app.services.graph_service import GraphService
+from app.services.vector_service import VectorService
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,8 @@ class ScannerService:
     def __init__(self) -> None:
         self._git_service = GitService()
         self._parser_service = ParserService()
+        self._graph_service = GraphService()
+        self._vector_service = VectorService()
 
         # Simple regex for hardcoded secret detection on raw strings
         self._secret_patterns = [
@@ -81,6 +85,9 @@ class ScannerService:
                     branch=scan.branch,
                 )
 
+                # Initialize vector collections in Qdrant
+                self._vector_service.initialize_collections()
+
                 # Capture actual commit SHA if not specified
                 latest_sha = self._git_service.get_latest_commit_sha(temp_dir)
                 if not scan.commit_sha and latest_sha:
@@ -108,12 +115,32 @@ class ScannerService:
                                 code_content = f.read()
 
                             lang = "python" if file_ext == ".py" else "javascript"
+                            
+                            # Parse code using AST parser
+                            ast_data = self._parser_service.parse_code(code_content, lang)
+                            
+                            # 1. Update Graph Database (Neo4j)
+                            self._graph_service.upsert_file_graph(
+                                repo_id=repo_record.id,
+                                file_path=relative_path,
+                                ast_data=ast_data,
+                            )
+                            
+                            # 2. Update Vector Database (Qdrant)
+                            self._vector_service.upsert_file_chunks(
+                                repo_id=repo_record.id,
+                                file_path=relative_path,
+                                code_content=code_content,
+                            )
+
+                            # 3. Analyze code using AST rules to generate findings
                             file_findings = self._analyze_file(
                                 relative_path=relative_path,
                                 code_content=code_content,
                                 language=lang,
                                 scan_id=scan.id,
                                 repo_id=repo_record.id,
+                                ast_data=ast_data,
                             )
                             findings_found.extend(file_findings)
                         except Exception as exc:
@@ -169,6 +196,7 @@ class ScannerService:
         language: str,
         scan_id: UUID,
         repo_id: UUID,
+        ast_data: dict | None = None,
     ) -> list[Finding]:
         """Analyzes a single source code file using the AST parser.
 
@@ -176,8 +204,9 @@ class ScannerService:
         """
         findings: list[Finding] = []
         
-        # Call tree-sitter to parse code and extract nodes
-        ast_data = self._parser_service.parse_code(code_content, language)
+        # Use pre-parsed AST if available, otherwise parse it now
+        if ast_data is None:
+            ast_data = self._parser_service.parse_code(code_content, language)
 
         # Split lines for snippet extraction
         lines = code_content.splitlines()
