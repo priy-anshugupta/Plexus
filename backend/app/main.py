@@ -21,6 +21,7 @@ from app.routers import (
     findings_router,
     repositories_router,
     scans_router,
+    webhooks_router,
 )
 
 
@@ -69,6 +70,7 @@ app.include_router(repositories_router, prefix="/api/v1")
 app.include_router(scans_router, prefix="/api/v1")
 app.include_router(findings_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
+app.include_router(webhooks_router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
