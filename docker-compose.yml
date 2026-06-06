@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # Relational Database for user metadata, scan records, audit logs, and LangGraph checkpoints
+  postgres:
+    image: postgres:16-alpine
+    container_name: plexus-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: plexus
+      POSTGRES_PASSWORD: plexuspassword
+      POSTGRES_DB: plexus_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plexus -d plexus_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Vector Database for storing code embeddings and commit chunk representations
+  qdrant:
+    image: qdrant/qdrant:v1.9.7
+    container_name: plexus-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Graph Database for code AST mapping, dependency graphs, and GraphRAG operations
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: plexus-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474" # HTTP Dashboard
+      - "7687:7687" # Bolt protocol
+    environment:
+      NEO4J_AUTH: neo4j/plexuspassword
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: 'apoc.*'
+      NEO4J_dbms_security_procedures_allowlist: 'apoc.*'
+    volumes:
+      - neo4j-data:/data
+      - neo4j-import:/import
+      - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p plexuspassword 'RETURN 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Caching and Pub/Sub Event broker for real-time dashboard notifications
+  redis:
+    image: redis:7-alpine
+    container_name: plexus-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  qdrant-data:
+  neo4j-data:
+  neo4j-import:
+  neo4j-logs:
+  redis-data:
