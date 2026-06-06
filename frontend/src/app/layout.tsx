@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: "Relational code intelligence, multi-agent automated audits, and autonomous remediation.",
 };
 
+import { RoleProvider } from "../context/RoleContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -28,8 +30,11 @@ export default function RootLayout({
       className={`${inter.variable} ${outfit.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-background-dark text-slate-100 selection:bg-primary/20 selection:text-primary">
-        {children}
+        <RoleProvider>
+          {children}
+        </RoleProvider>
       </body>
     </html>
   );
 }
+
