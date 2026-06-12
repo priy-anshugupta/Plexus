@@ -169,18 +169,22 @@ Plexus integrates a modern, highly optimized stack designed to manage complex co
 ## 👁️ Core Features
 
 ### 1. Multi-Agent Collaborative Auditing & Action
-FastAPI triggers a parallel LangGraph pipeline. The orchestrator delegates tasks across a **7-agent network** composed of 6 parallel auditing agents and 1 autonomous remediation agent:
+FastAPI triggers a parallel LangGraph pipeline. The execution lifecycle is managed across a **9-agent network** composed of orchestrating, auditing, aggregating, and action-taking nodes:
+
+#### 🎮 Orchestration & Lifecycle Agents
+1. **🎯 Orchestrator Agent**: Wires the StateGraph, manages user context, handles files classification, and dispatches parallel analysis tasks via the `Send()` API.
+2. **⚖️ Aggregator & Cross-Validator Agent**: Deduplicates outputs from other agents, cross-validates vulnerabilities against AST graphs and static rules to filter false positives, and compiles the final security payload.
 
 #### 🔍 Read-Only Auditing Agents (6 Parallel Nodes):
-1. **🔒 Security Agent:** Audits broken authentication, SQL injections, XSS, and OWASP Top 10 vulnerabilities.
-2. **🎨 Frontend Agent:** Focuses on unsafe DOM manipulation, React stale closures, and memory leaks.
-3. **⚙️ Backend Agent:** Audits input validation, exception handling, race conditions, and business logic.
-4. **🗄️ Database Agent:** Detects N+1 query loops, missing indexes, and unoptimized queries.
-5. **🐳 DevOps Agent:** Scans Dockerfiles, compose files, and K8s manifests for unpinned images or root privilege exploits.
-6. **📦 Dependency Agent:** Queries the `OSV.dev` database to flag CVEs and license compliance issues.
+3. **🔒 Security Agent:** Audits authentication mechanisms, SQL injections, XSS, and general OWASP Top 10 vulnerabilities.
+4. **🎨 Frontend Agent:** Focuses on DOM modifications, memory leaks, package security in frontend assets, and stale closures.
+5. **⚙️ Backend Agent:** Audits validation flows, unhandled exceptions, race conditions, and business logic.
+6. **🗄️ Database Agent:** Detects N+1 query loops, missing indexes, and unoptimized migrations.
+7. **🐳 DevOps Agent:** Scans Dockerfiles, compose files, and Kubernetes manifests for root access vulnerabilities or configuration security holes.
+8. **📦 Dependency Agent:** Integrates with the `OSV.dev` database to flag CVEs and license compliance issues.
 
 #### 🛠️ Write-Access Action Agent (1 Autonomous Node):
-7. **🔧 Remediation Agent (Write-Agent):** Branches the repository, applies AST-level code corrections, executes unit tests, and submits Pull Requests on GitHub.
+9. **🔧 Remediation Agent (Write-Agent):** Branches the repository, applies AST-level code corrections, executes unit tests, and submits Pull Requests on GitHub.
 
 ### 2. GraphRAG Engine & Service Layer
 Rather than running as a standalone agent node, **GraphRAG** operates as a foundational data retrieval service layer (`graph_service.py` and `vector_service.py`).
