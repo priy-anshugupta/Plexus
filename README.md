@@ -56,46 +56,105 @@ During dry-runs on vulnerable test codebases containing SQL injections, hardcode
 
 ---
 
-## 🛠️ Technology Stack
+## 🛠️ Core Technology Stack & Architecture
 
-Plexus integrates a modern, premium, and highly efficient stack designed to handle large-scale code graphs and deliver responsive, real-time UI.
+Plexus integrates a modern, highly optimized stack designed to manage complex code property graphs, execute multi-agent workflows with low latency, and deliver a responsive, security-hardened interface.
 
 ```
-                  ┌──────────────────────────────────────────────┐
-                  │            Next.js 15+ Frontend              │
-                  │  (Role-Based UI, D3 react-force-graph, CASL) │
-                  └──────────────────────┬───────────────────────┘
-                                         │
-                                         ▼ REST / SSE
-                  ┌──────────────────────────────────────────────┐
-                  │             FastAPI Backend                  │
-                  │   (Repository Lifecycles & Agent Routing)    │
-                  └──────────┬───────────────┬───────────────┬───┘
-                             │               │               │
-                             ▼               ▼               ▼
-                      ┌──────────────┐┌──────────────┐┌──────────────┐
-                      │  PostgreSQL  ││    Neo4j     ││    Qdrant    │
-                      │  (Relational ││ (AST Code    ││ (Code Vector│
-                      │   Metadata)  ││  Graph DB)   ││ Embeddings) │
-                      └──────────────┘└──────────────┘└──────────────┘
+                      ┌──────────────────────────────────────────────┐
+                      │             Next.js 15 Frontend              │
+                      │  (RSCs, D3 react-force-graph, CASL Guards)   │
+                      └──────────────────────┬───────────────────────┘
+                                             │
+                                             ▼ REST APIs & SSE (Server-Sent Events)
+                      ┌──────────────────────────────────────────────┐
+                      │             FastAPI Backend                  │
+                      │   (Lifecycles, Git Sync, Agent Dispatcher)   │
+                      └──────────┬───────────────┬───────────────┬───┘
+                                 │               │               │
+                                 ▼               ▼               ▼
+                          ┌──────────────┐┌──────────────┐┌──────────────┐
+                          │  PostgreSQL  ││  Neo4j (AST  ││ Qdrant Vector│
+                          │ (Relational  ││  Dependency  ││ (Semantic    │
+                          │   Metadata)  ││   Graph DB)  ││ Embeddings)  │
+                          └──────┬───────┘└──────────────┘└──────────────┘
+                                 │
+                                 ▼ (State Checkpointing)
+                          ┌──────────────┐
+                          │  Redis Event │
+                          │  Pub/Sub Bus │
+                          └──────────────┘
 ```
 
-### 🧠 Backend (Core Engine)
-* **API Framework:** **FastAPI** (Python 3.11+) for high-performance asynchronous request handling.
-* **Agentic Orchestration:** **LangGraph (StateGraph)** for cyclical agent workflows, checkpointing, and dynamic fan-out (`Send` API).
-* **Database & ORM:** **SQLAlchemy 2.0** with **PostgreSQL** for managing repository scan states and findings metadata.
-* **Code Parsing:** **Tree-sitter** (Python & JavaScript bindings) for language-agnostic Abstract Syntax Tree (AST) extraction.
-* **Vector Store:** **Qdrant** (production-grade vector similarity database for code snippets and semantic documentation chunks).
-* **Graph Database:** **Neo4j** (Native graph engine with APOC plugins for traversing call chains and dependency networks).
-* **Caching & Events:** **Redis** for state caching and server-sent event (SSE) distribution.
+---
 
-### 🎨 Frontend (DevEx Dashboard)
-* **Framework:** **Next.js 15** (App Router) with React Server Components (RSC) for optimized server-side rendering.
-* **Styling:** **Tailwind CSS v4** + **shadcn/ui** (custom dark-mode glassmorphic aesthetics).
-* **Graph Rendering:** **`react-force-graph-2d`** (D3-based canvas renderer for interactive code dependency graphs).
-* **Permissions Control:** **CASL** for declarative role-based views.
-* **Code Visualization:** **Monaco Editor** (`@monaco-editor/react`) for full-fidelity interactive code viewing.
-* **Charts:** **Recharts** for compliance heatmaps and vulnerability trends.
+### 1. Backend Engine & API Architecture
+
+#### ⚙️ FastAPI (Python 3.11+)
+* **Role**: Primary application server hosting the REST endpoints and Server-Sent Event (SSE) execution streams.
+* **Why Chosen**: Chosen for its high-performance asynchronous runtime built on `starlette` and `uvicorn`, enabling concurrent long-lived network connections. This is vital for streaming real-time security check updates and multi-agent logs to the frontend without blocking worker threads.
+* **Key Specs**: Out-of-the-box OpenAPI (Swagger) schema generation, native async/await lifecycle context managers, and strict request/response validation utilizing Pydantic.
+
+#### 🗄️ SQLAlchemy 2.0 ORM & PostgreSQL
+* **Role**: Structured relational metadata database. Stores user accounts, api keys, repository configurations, historical scan sessions, and security findings metadata.
+* **Why Chosen**: SQLAlchemy 2.0 provides type-safe ORM definitions utilizing Python's PEP 484 type hints (e.g., `Mapped` and `mapped_column`). PostgreSQL acts as the core relational ledger and stores LangGraph StateGraph thread checkpoints.
+* **Key Specs**: Asyncpg database driver for asynchronous query executing; connection pooling configured for high concurrency; Alembic integration for schema migration versioning.
+
+---
+
+### 2. Multi-Agent & LLM Reasoning Layer
+
+#### 🧠 LangGraph (StateGraph Orchestration)
+* **Role**: Manages the multi-agent code audit pipeline. Wires specialist agents as graph nodes and models execution handoffs, StateGraph checkpointing, and dynamic fan-outs.
+* **Why Chosen**: Built on top of Pregel-style message-passing. Enables concurrent parallel execution of the 6 specialized agents via the `Send()` API. Reduces scan times from minutes to seconds. Provides Postgres-backed thread persistence (`PostgresSaver`) allowing developer interruptions and manual safety approvals.
+* **Key Specs**: Stateful execution flow with custom reducer functions (`operator.add`) to automatically combine JSON findings from concurrent nodes.
+
+#### 🔒 Hybrid LLM Router (GPT-4o & Local Llama 3 via vLLM)
+* **Role**: Routes source code files to the optimal inference model depending on security rules.
+* **Why Chosen**: Resolves the enterprise trade-off between reasoning accuracy and data privacy. Outgoing code is scanned locally by a classifier (e.g. Microsoft Presidio). Clean files are processed via GPT-4o-mini for maximum speed and cost efficiency. Proprietary or highly sensitive files containing credentials/PII are routed to a local Llama 3 (70B/405B) model running on-premises.
+* **Key Specs**: Local inference powered by **vLLM** (PagedAttention, tensor-parallelized execution) for optimal GPU compute efficiency.
+
+---
+
+### 3. Parsing & Code Property Graph Layer
+
+#### 🌳 Tree-sitter Parser
+* **Role**: Dynamic, language-agnostic code syntax parser.
+* **Why Chosen**: Compiles source code text (Python and JavaScript/TypeScript) into full Abstract Syntax Trees (AST) in milliseconds. Unlike regex-based matchers, Tree-sitter is highly error-tolerant, allowing it to successfully compile and inspect code containing syntax errors or incomplete statements.
+* **Key Specs**: Custom query visitor pattern extracting variable assignments, class structures, method scopes, import statements, and function calls.
+
+#### 🕸️ Neo4j Graph Database
+* **Role**: Maps the semantic layout and functional linkages of the codebase.
+* **Why Chosen**: Models code as a graph of dependencies. Generates a network of `File`, `Module`, `Class`, and `Function` nodes connected via `CALLS`, `IMPORTS`, `DEFINES`, and `INHERITS` relationships. This property graph is queried using Cypher to calculate the forward blast radius of security vulnerabilities across service borders.
+* **Key Specs**: Neo4j Community Server with **APOC** extensions; custom indexes on node identifiers and types for sub-millisecond graph traversals.
+
+#### 🔍 Qdrant Vector Store
+* **Role**: Vector database holding high-dimensional semantic representations of logical code chunks.
+* **Why Chosen**: Rust-based vector database supporting advanced payload filtering and high-performance similarity lookups. Employs a line-based overlapping chunker (30 lines per chunk, 5 lines overlap) and indexes them into Qdrant for semantic code queries and Git history archaeology (Semantic Time-Travel).
+* **Key Specs**: 1536-dimension Cosine distance index; custom L2-normalized float fallback mock vector engine to guarantee mathematical retrieval consistency when offline.
+
+#### ⚡ Semgrep Pre-Filtering Engine
+* **Role**: High-speed static analysis parser executing security rules before LLM invocation.
+* **Why Chosen**: Operates as a cost-prevention gate. Quickly scans files for security anomalies. If a file is clean, it is bypassed, saving 60% - 80% on LLM token costs. Flagged files are sent to the AI agents with Semgrep metadata attached as reasoning hints.
+
+---
+
+### 4. Interactive Frontend Layer
+
+#### 🎨 Next.js 15 (App Router) & Tailwind CSS v4
+* **Role**: High-fidelity developer dashboard.
+* **Why Chosen**: Next.js 15 leverages React Server Components (RSC) to render database-heavy layouts on the server, shipping zero client-side JavaScript by default. React Client Components are only loaded for interactive panels (Monaco Editor, Force Graphs). Tailwind CSS v4 provides utility-first styling with modern dark-mode glassmorphic layouts.
+* **Key Specs**: Server Actions for secure database mutations, Server-Sent Events (SSE) stream readers, and Lucide React icons.
+
+#### 📊 react-force-graph-2d & Recharts
+* **Role**: High-performance visualization elements.
+* **Why Chosen**: Renders the Neo4j codebase graph using HTML5 Canvas to handle thousands of nodes smoothly. Visualizes the recursive blast radius of a vulnerability in a force-directed layout. Recharts provides responsive SVGs for CISO and CTO metrics dashboards.
+* **Key Specs**: D3-force physical simulations, node coloring based on severity tiers, and interactive click highlight traversals.
+
+#### 🛡️ CASL Access Controls
+* **Role**: Declarative client and server role-based access control.
+* **Why Chosen**: Defines authorization rules centrally. Evaluates permissions dynamically (e.g. CISO, CTO, Junior Developer) on both Next.js Server Components and client-side view containers.
+
 
 ---
 
