@@ -169,7 +169,7 @@ Plexus integrates a modern, highly optimized stack designed to manage complex co
 ## 👁️ Core Features
 
 ### 1. Multi-Agent Collaborative Auditing & Action
-FastAPI triggers a parallel LangGraph pipeline. The execution lifecycle is managed across a **9-agent network** composed of orchestrating, auditing, aggregating, and action-taking nodes:
+FastAPI triggers a parallel LangGraph pipeline. The execution lifecycle is managed across a **10-agent network** composed of orchestrating, auditing, aggregating, modeling, and action-taking nodes:
 
 #### 🎮 Orchestration & Lifecycle Agents
 1. **🎯 Orchestrator Agent**: Wires the StateGraph, manages user context, handles files classification, and dispatches parallel analysis tasks via the `Send()` API.
@@ -183,8 +183,9 @@ FastAPI triggers a parallel LangGraph pipeline. The execution lifecycle is manag
 7. **🐳 DevOps Agent:** Scans Dockerfiles, compose files, and Kubernetes manifests for root access vulnerabilities or configuration security holes.
 8. **📦 Dependency Agent:** Integrates with the `OSV.dev` database to flag CVEs and license compliance issues.
 
-#### 🛠️ Write-Access Action Agent (1 Autonomous Node):
-9. **🔧 Remediation Agent (Write-Agent):** Branches the repository, applies AST-level code corrections, executes unit tests, and submits Pull Requests on GitHub.
+#### 🛡️ Modeling & Action Agents (2 Nodes)
+9. **🔍 Threat Modeling Agent**: Analyzes the compiled code property graph in Neo4j and automatically generates system-level STRIDE threat models based on architecture mappings.
+10. **🔧 Remediation Agent (Write-Agent):** Branches the repository, applies AST-level code corrections, executes unit tests, and submits Pull Requests on GitHub.
 
 ### 2. GraphRAG Engine & Service Layer
 Rather than running as a standalone agent node, **GraphRAG** operates as a foundational data retrieval service layer (`graph_service.py` and `vector_service.py`).
