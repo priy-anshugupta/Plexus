@@ -168,14 +168,19 @@ Plexus integrates a modern, highly optimized stack designed to manage complex co
 
 ## 👁️ Core Features
 
-### 1. Multi-Agent Collaborative Auditing
-FastAPI triggers a parallel LangGraph pipeline. The Orchestrator delegates scans across **6 specialized agents**:
+### 1. Multi-Agent Collaborative Auditing & Action
+FastAPI triggers a parallel LangGraph pipeline. The orchestrator delegates tasks across a **7-agent network** composed of 6 parallel auditing agents and 1 autonomous remediation agent:
+
+#### 🔍 Read-Only Auditing Agents (6 Parallel Nodes):
 1. **🔒 Security Agent:** Audits broken authentication, SQL injections, XSS, and OWASP Top 10 vulnerabilities.
 2. **🎨 Frontend Agent:** Focuses on unsafe DOM manipulation, React stale closures, and memory leaks.
 3. **⚙️ Backend Agent:** Audits input validation, exception handling, race conditions, and business logic.
 4. **🗄️ Database Agent:** Detects N+1 query loops, missing indexes, and unoptimized queries.
 5. **🐳 DevOps Agent:** Scans Dockerfiles, compose files, and K8s manifests for unpinned images or root privilege exploits.
 6. **📦 Dependency Agent:** Queries the `OSV.dev` database to flag CVEs and license compliance issues.
+
+#### 🛠️ Write-Access Action Agent (1 Autonomous Node):
+7. **🔧 Remediation Agent (Write-Agent):** Branches the repository, applies AST-level code corrections, executes unit tests, and submits Pull Requests on GitHub.
 
 ### 2. GraphRAG Engine & Service Layer
 Rather than running as a standalone agent node, **GraphRAG** operates as a foundational data retrieval service layer (`graph_service.py` and `vector_service.py`).
