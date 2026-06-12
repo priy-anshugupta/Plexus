@@ -22,7 +22,7 @@ Plexus bridges this gap by treating code as a living network of nodes (Files, Cl
 | :--- | :--- | :--- |
 | **Code Representation** | Flat text files in isolation | **Knowledge Graph** (connected nodes & relationships) |
 | **Context Scope** | Single file or limited token window | **GraphRAG** (multi-hop relational retrieval) |
-| **Security Audits** | Pattern matching (Regex / AST-only rules) | **Multi-Agent Triage** (Collaborative agent pipeline) |
+| **Security Audits** | Pattern matching (Regex / AST-only rules) | **Multi-Agent Triage** (6+ specialized agents in parallel) |
 | **Impact Analysis** | None (manual trace required) | **Blast Radius Visualization** (downstream propagation paths) |
 | **Git Archaeology** | Git CLI / plain diffs | **Semantic Time-Travel** (natural language git history queries) |
 | **Remediation** | Report only or single-file suggestion | **Autonomous PR Engine** (graph-aware fixes, runs tests) |
@@ -80,10 +80,10 @@ Plexus integrates a modern, highly optimized stack designed to manage complex co
                                      │            └──────┬───────┘
                                      ▼                   │
                       ┌──────────────────────────┐       │
-                      │   3x Collaborative AI    │       │
-                      │         Agents           │       │
-                      │  (Security, Review,      │       │
-                      │         Auto-Fix)        │       │
+                      │  6x Parallel AI Agents   │       │
+                      │  - Security   - Frontend │       │
+                      │  - Backend    - Database │       │
+                      │  - DevOps     - Dependency│       │
                       └──────────┬───────────┬───┘       │
                                  │           │           │
                                  ▼           ▼           ▼ (Checkpoints)
@@ -114,7 +114,7 @@ Plexus integrates a modern, highly optimized stack designed to manage complex co
 
 #### 🧠 LangGraph (StateGraph Orchestration)
 * **Role**: Manages the multi-agent code audit pipeline. Wires specialist agents as graph nodes and models execution handoffs, StateGraph checkpointing, and dynamic fan-outs.
-* **Why Chosen**: Built on top of Pregel-style message-passing. Orchestrates the sequential pipeline of specialized agents (Security Analyzer, Code Quality Reviewer, and Auto-Fix Generator), routing states cleanly between nodes. Reduces scan times from minutes to seconds. Provides Postgres-backed thread persistence (`PostgresSaver`) allowing developer interruptions and manual safety approvals.
+* **Why Chosen**: Built on top of Pregel-style message-passing. Enables concurrent parallel execution of the 6 specialized agents via the `Send()` API. Reduces scan times from minutes to seconds. Provides Postgres-backed thread persistence (`PostgresSaver`) allowing developer interruptions and manual safety approvals.
 * **Key Specs**: Stateful execution flow with custom reducer functions (`operator.add`) to automatically combine JSON findings from concurrent nodes.
 
 #### 🔒 Hybrid LLM Router (GPT-4o & Local Llama 3 via vLLM)
@@ -169,10 +169,13 @@ Plexus integrates a modern, highly optimized stack designed to manage complex co
 ## 👁️ Core Features
 
 ### 1. Multi-Agent Collaborative Auditing
-FastAPI triggers a LangGraph pipeline (`orchestrator.py`). The Orchestrator manages execution state and routes context across **3 specialized collaborative AI agents**:
-1. **🔒 Security Analyzer Agent (`security_analyser`):** Audits code blocks for injection risks (SQLi, XSS, Path Traversal), remote code execution, and hardcoded credentials. It leverages AST pattern rules and LLM validation.
-2. **📝 Code Quality Review Agent (`code_reviewer`):** Assesses code styling rules, cognitive complexity, file headers/docstrings, and tracks unresolved TODO flags, ensuring clean codebase hygiene.
-3. **🛠️ Auto-Fix Refactoring Agent (`autofix_generator`):** Synthesizes precise code correction patches (e.g., swapping a vulnerable connection with parameterized inputs) and writes structural explanation summaries for Pull Requests.
+FastAPI triggers a parallel LangGraph pipeline. The Orchestrator delegates scans across **6 specialized agents**:
+1. **🔒 Security Agent:** Audits broken authentication, SQL injections, XSS, and OWASP Top 10 vulnerabilities.
+2. **🎨 Frontend Agent:** Focuses on unsafe DOM manipulation, React stale closures, and memory leaks.
+3. **⚙️ Backend Agent:** Audits input validation, exception handling, race conditions, and business logic.
+4. **🗄️ Database Agent:** Detects N+1 query loops, missing indexes, and unoptimized queries.
+5. **🐳 DevOps Agent:** Scans Dockerfiles, compose files, and K8s manifests for unpinned images or root privilege exploits.
+6. **📦 Dependency Agent:** Queries the `OSV.dev` database to flag CVEs and license compliance issues.
 
 ### 2. GraphRAG Engine & Service Layer
 Rather than running as a standalone agent node, **GraphRAG** operates as a foundational data retrieval service layer (`graph_service.py` and `vector_service.py`).
