@@ -70,20 +70,28 @@ Plexus integrates a modern, highly optimized stack designed to manage complex co
                       ┌──────────────────────────────────────────────┐
                       │             FastAPI Backend                  │
                       │   (Lifecycles, Git Sync, Agent Dispatcher)   │
-                      └──────────┬───────────────┬───────────────┬───┘
-                                 │               │               │
-                                 ▼               ▼               ▼
+                      └──────────────┬───────────────┬───────────────┘
+                                     │               │
+                                     ▼               ▼
+                      ┌──────────────────────────┐┌──────────────┐
+                      │   LangGraph Orchestrator ││  PostgreSQL  │
+                      │  (Pregel StateGraph Flow)││ (Relational  │
+                      └──────────────┬───────────┘│   Metadata)  │
+                                     │            └──────┬───────┘
+                                     ▼                   │
+                      ┌──────────────────────────┐       │
+                      │   6x Parallel AI Agents  │       │
+                      │  (Security, Frontend,    │       │
+                      │   Backend, Database,     │       │
+                      │   DevOps, Dependency)    │       │
+                      └──────────┬───────────┬───┘       │
+                                 │           │           │
+                                 ▼           ▼           ▼ (Checkpoints)
                           ┌──────────────┐┌──────────────┐┌──────────────┐
-                          │  PostgreSQL  ││  Neo4j (AST  ││ Qdrant Vector│
-                          │ (Relational  ││  Dependency  ││ (Semantic    │
-                          │   Metadata)  ││   Graph DB)  ││ Embeddings)  │
-                          └──────┬───────┘└──────────────┘└──────────────┘
-                                 │
-                                 ▼ (State Checkpointing)
-                          ┌──────────────┐
-                          │  Redis Event │
-                          │  Pub/Sub Bus │
-                          └──────────────┘
+                          │ Neo4j Graph  ││ Qdrant Vector││ Redis Event  │
+                          │ (AST Nodes & ││ (Code Vector ││ Pub/Sub &   │
+                          │ Call Chains) ││ Embeddings)  ││ State Cache  │
+                          └──────────────┘└──────────────┘└──────────────┘
 ```
 
 ---
