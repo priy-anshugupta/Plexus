@@ -174,8 +174,10 @@ FastAPI triggers a LangGraph pipeline (`orchestrator.py`). The Orchestrator mana
 2. **📝 Code Quality Review Agent (`code_reviewer`):** Assesses code styling rules, cognitive complexity, file headers/docstrings, and tracks unresolved TODO flags, ensuring clean codebase hygiene.
 3. **🛠️ Auto-Fix Refactoring Agent (`autofix_generator`):** Synthesizes precise code correction patches (e.g., swapping a vulnerable connection with parameterized inputs) and writes structural explanation summaries for Pull Requests.
 
-### 2. GraphRAG Engine
-Integrates vector similarity search (Qdrant) and graph database traversal (Neo4j). It generates a global structural map of the codebase. Instead of matching single lines, Plexus can answer multi-hop queries like:
+### 2. GraphRAG Engine & Service Layer
+Rather than running as a standalone agent node, **GraphRAG** operates as a foundational data retrieval service layer (`graph_service.py` and `vector_service.py`).
+* **Ingestion & Indexing**: The scanning pipeline automatically parses files, constructs AST node/edge relationships in Neo4j, and uploads 1536-dimension code chunk vectors to Qdrant.
+* **Agent Integration**: The AI agents (Security Analyzer, Code Review, and Auto-Fix) leverage this retrieval layer to execute multi-hop reasoning over the entire codebase architecture:
 > *"Does a vulnerability in `payment_gateway.py` reach an API endpoint exposed to unauthorized web users?"*
 
 ### 3. Blast Radius Visualization
