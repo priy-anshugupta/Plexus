@@ -1,8 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-export type UserRole = "ciso" | "cto" | "junior_dev";
+export type UserRole = "ciso" | "cto" | "junior_dev" | "solo_dev";
 
 interface RoleContextType {
   role: UserRole;
@@ -13,7 +13,21 @@ interface RoleContextType {
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<UserRole>("ciso");
+  const [role, setRoleState] = useState<UserRole>("ciso");
+
+  // Load from memory on component mount
+  useEffect(() => {
+    const savedRole = localStorage.getItem("plexus_role") as UserRole | null;
+    if (savedRole) {
+      setRoleState(savedRole);
+    }
+  }, []);
+
+  // Update memory whenever role changes
+  const setRole = (newRole: UserRole) => {
+    setRoleState(newRole);
+    localStorage.setItem("plexus_role", newRole);
+  };
 
   const getRoleName = (r: UserRole) => {
     switch (r) {
@@ -23,6 +37,8 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         return "Chief Technology Officer (CTO)";
       case "junior_dev":
         return "Junior Developer Onboarding";
+      case "solo_dev":
+        return "Solo Developer";
       default:
         return "Developer";
     }
