@@ -1,15 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import CodeViewer from "../CodeViewer";
 import BlastRadiusGraph, { GraphNode, GraphLink } from "../BlastRadiusGraph";
 import { 
   Shield, 
   AlertOctagon, 
-  CheckCircle, 
-  HelpCircle,
-  FileCode,
-  ArrowRight,
   TrendingDown,
   Lock,
   Layers,
@@ -105,6 +102,22 @@ const mockFindings: FindingItem[] = [
   }
 ];
 
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.1, delayChildren: 0.05 },
+  },
+};
+
+const cardVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: { duration: 0.45, ease: "easeOut" as const },
+  },
+};
+
 export default function CisoDashboard() {
   const [selectedFinding, setSelectedFinding] = useState<FindingItem | null>(null);
 
@@ -122,11 +135,25 @@ export default function CisoDashboard() {
   };
 
   return (
-    <div className="flex flex-col gap-6 w-full">
+    <motion.div
+      className="flex flex-col gap-6 w-full"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+    >
       {/* Overview Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <motion.div
+        className="grid grid-cols-1 md:grid-cols-4 gap-4"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {/* Compliance Card */}
-        <div className="glass-panel rounded-xl p-5 flex flex-col justify-between">
+        <motion.div
+          className="glass-panel rounded-xl p-5 flex flex-col justify-between"
+          variants={cardVariants}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: "easeOut" as const } }}
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-mono">SOC2 COMPLIANCE</span>
             <Lock className="w-4 h-4 text-emerald-400" />
@@ -136,12 +163,21 @@ export default function CisoDashboard() {
             <span className="text-xs text-slate-500">Ready</span>
           </div>
           <div className="mt-2 w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-            <div className="bg-emerald-400 h-full" style={{ width: "88%" }} />
+            <motion.div
+              className="bg-emerald-400 h-full"
+              initial={{ width: 0 }}
+              animate={{ width: "88%" }}
+              transition={{ duration: 1, delay: 0.3, ease: "easeOut" as const }}
+            />
           </div>
-        </div>
+        </motion.div>
 
         {/* ISO 27001 Card */}
-        <div className="glass-panel rounded-xl p-5 flex flex-col justify-between">
+        <motion.div
+          className="glass-panel rounded-xl p-5 flex flex-col justify-between"
+          variants={cardVariants}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: "easeOut" as const } }}
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-mono">ISO 27001 POSTURE</span>
             <Layers className="w-4 h-4 text-teal-400" />
@@ -151,12 +187,21 @@ export default function CisoDashboard() {
             <span className="text-xs text-slate-500">Compliant</span>
           </div>
           <div className="mt-2 w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-            <div className="bg-teal-400 h-full" style={{ width: "74%" }} />
+            <motion.div
+              className="bg-teal-400 h-full"
+              initial={{ width: 0 }}
+              animate={{ width: "74%" }}
+              transition={{ duration: 1, delay: 0.4, ease: "easeOut" as const }}
+            />
           </div>
-        </div>
+        </motion.div>
 
         {/* Critical Dials */}
-        <div className="glass-panel rounded-xl p-5 flex flex-col justify-between">
+        <motion.div
+          className="glass-panel rounded-xl p-5 flex flex-col justify-between"
+          variants={cardVariants}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: "easeOut" as const } }}
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-mono">CRITICAL THREATS</span>
             <AlertOctagon className="w-4 h-4 text-rose-500" />
@@ -169,10 +214,14 @@ export default function CisoDashboard() {
             <TrendingDown className="w-3.5 h-3.5 text-emerald-400" />
             <span>Down 50% from last scan</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Unified Score */}
-        <div className="glass-panel rounded-xl p-5 flex flex-col justify-between">
+        <motion.div
+          className="glass-panel rounded-xl p-5 flex flex-col justify-between"
+          variants={cardVariants}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: "easeOut" as const } }}
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-mono">SECURITY POSTURE SCORE</span>
             <Shield className="w-4 h-4 text-primary" />
@@ -184,28 +233,45 @@ export default function CisoDashboard() {
           <div className="text-[10px] text-slate-500 font-mono mt-2">
             Grade: <span className="text-primary font-bold">EXCELLENT</span>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Vulnerability Inventory List */}
         <div className="lg:col-span-1 flex flex-col gap-3">
-          <div className="text-xs text-slate-500 font-mono uppercase tracking-wider px-1">
+          <motion.div
+            className="text-xs text-slate-500 font-mono uppercase tracking-wider px-1"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.35, delay: 0.3 }}
+          >
             Vulnerability Inventory
-          </div>
+          </motion.div>
           
           <div className="flex flex-col gap-2">
-            {mockFindings.map((finding) => (
-              <button
+            {mockFindings.map((finding, index) => (
+              <motion.button
                 key={finding.id}
                 onClick={() => setSelectedFinding(finding)}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.35 + index * 0.08 }}
+                whileHover={{ scale: 1.015, x: 4 }}
+                whileTap={{ scale: 0.985 }}
                 className={`w-full text-left p-4 rounded-xl border transition-all duration-300 relative overflow-hidden ${
                   selectedFinding?.id === finding.id 
-                    ? "bg-slate-900 border-primary shadow-lg" 
+                    ? "bg-slate-900 border-primary shadow-lg shadow-primary/5" 
                     : "bg-panel-dark/25 hover:bg-slate-900/40 border-white/5"
                 }`}
               >
+                {selectedFinding?.id === finding.id && (
+                  <motion.div
+                    className="absolute inset-0 border-l-2 border-primary pointer-events-none"
+                    layoutId="activeIndicator"
+                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                  />
+                )}
                 <div className="flex items-center justify-between mb-2">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getSeverityStyles(finding.severity)}`}>
                     {finding.severity}
@@ -224,81 +290,107 @@ export default function CisoDashboard() {
                   <span className="truncate max-w-[200px] text-slate-500">{finding.category}</span>
                   <ChevronRight className="w-4 h-4 text-slate-600" />
                 </div>
-              </button>
+              </motion.button>
             ))}
           </div>
         </div>
 
         {/* Detailed Inspection Split Screen */}
         <div className="lg:col-span-2">
-          {selectedFinding ? (
-            <div className="flex flex-col gap-4 animate-in fade-in duration-300">
-              {/* Header Info */}
-              <div className="glass-panel rounded-xl p-5 relative">
-                <button
-                  onClick={() => setSelectedFinding(null)}
-                  className="absolute top-4 right-4 text-slate-500 hover:text-slate-200"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <div className="flex items-center gap-3 mb-2">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getSeverityStyles(selectedFinding.severity)}`}>
-                    {selectedFinding.severity}
-                  </span>
-                  <span className="text-xs text-slate-500 font-mono">{selectedFinding.category}</span>
+          <AnimatePresence mode="wait">
+            {selectedFinding ? (
+              <motion.div
+                key={selectedFinding.id}
+                className="flex flex-col gap-4"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3, ease: "easeOut" as const }}
+              >
+                {/* Header Info */}
+                <div className="glass-panel rounded-xl p-5 relative">
+                  <button
+                    onClick={() => setSelectedFinding(null)}
+                    className="absolute top-4 right-4 text-slate-500 hover:text-slate-200 transition-colors duration-200"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getSeverityStyles(selectedFinding.severity)}`}>
+                      {selectedFinding.severity}
+                    </span>
+                    <span className="text-xs text-slate-500 font-mono">{selectedFinding.category}</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-100 mb-2">
+                    {selectedFinding.title}
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                    {selectedFinding.description}
+                  </p>
+                  <div className="flex gap-4 text-xs font-mono text-slate-500 border-t border-white/5 pt-3">
+                    <div>File: <span className="text-slate-300">{selectedFinding.filePath}</span></div>
+                    <div>Line: <span className="text-slate-300">{selectedFinding.line}</span></div>
+                  </div>
                 </div>
-                <h3 className="text-lg font-bold text-slate-100 mb-2">
-                  {selectedFinding.title}
-                </h3>
-                <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  {selectedFinding.description}
+
+                {/* Code Snippet and Blast Radius Tabs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <motion.div
+                    className="flex flex-col gap-2"
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.35, delay: 0.15 }}
+                  >
+                    <div className="text-xs text-slate-500 font-mono uppercase tracking-wider px-1">
+                      AST Code Context
+                    </div>
+                    <div className="h-[350px]">
+                      <CodeViewer
+                        code={selectedFinding.codeSnippet}
+                        filePath={selectedFinding.filePath}
+                        highlightLine={selectedFinding.line}
+                      />
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    className="flex flex-col gap-2"
+                    initial={{ opacity: 0, x: 12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.35, delay: 0.2 }}
+                  >
+                    <div className="text-xs text-slate-500 font-mono uppercase tracking-wider px-1">
+                      Graph Blast Radius Visualization
+                    </div>
+                    <div className="h-[350px]">
+                      <BlastRadiusGraph
+                        nodes={selectedFinding.nodes}
+                        links={selectedFinding.links}
+                        vulnerabilityNodeId="v1"
+                      />
+                    </div>
+                  </motion.div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="empty-state"
+                className="glass-panel rounded-xl p-8 flex flex-col items-center justify-center text-center h-[500px] border-dashed border-slate-800"
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.97 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Shield className="w-12 h-12 text-slate-700 animate-pulse mb-4" />
+                <h3 className="text-slate-400 font-semibold mb-2">No Vulnerability Selected</h3>
+                <p className="text-xs text-slate-500 max-w-sm">
+                  Click on any vulnerability in the inventory list to view its code context and calculate its downstream impact.
                 </p>
-                <div className="flex gap-4 text-xs font-mono text-slate-500 border-t border-white/5 pt-3">
-                  <div>File: <span className="text-slate-300">{selectedFinding.filePath}</span></div>
-                  <div>Line: <span className="text-slate-300">{selectedFinding.line}</span></div>
-                </div>
-              </div>
-
-              {/* Code Snippet and Blast Radius Tabs */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <div className="text-xs text-slate-500 font-mono uppercase tracking-wider px-1">
-                    AST Code Context
-                  </div>
-                  <div className="h-[350px]">
-                    <CodeViewer
-                      code={selectedFinding.codeSnippet}
-                      filePath={selectedFinding.filePath}
-                      highlightLine={selectedFinding.line}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <div className="text-xs text-slate-500 font-mono uppercase tracking-wider px-1">
-                    Graph Blast Radius Visualization
-                  </div>
-                  <div className="h-[350px]">
-                    <BlastRadiusGraph
-                      nodes={selectedFinding.nodes}
-                      links={selectedFinding.links}
-                      vulnerabilityNodeId="v1"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="glass-panel rounded-xl p-8 flex flex-col items-center justify-center text-center h-[500px] border-dashed border-slate-800">
-              <Shield className="w-12 h-12 text-slate-700 animate-pulse mb-4" />
-              <h3 className="text-slate-400 font-semibold mb-2">No Vulnerability Selected</h3>
-              <p className="text-xs text-slate-500 max-w-sm">
-                Click on any vulnerability in the inventory list to view its code context and calculate its downstream impact.
-              </p>
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

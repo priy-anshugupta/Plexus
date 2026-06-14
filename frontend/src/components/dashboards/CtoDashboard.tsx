@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { motion } from "framer-motion";
 import { 
   AreaChart, 
   Area, 
@@ -13,14 +14,10 @@ import {
   Bar
 } from "recharts";
 import { 
-  TrendingUp, 
   Hourglass, 
   DollarSign, 
   Heart,
-  Calendar,
-  Zap,
-  Activity,
-  GitPullRequest
+  Zap
 } from "lucide-react";
 
 // Mock trend history
@@ -42,13 +39,59 @@ const debtData = [
   { module: "Frontend", hours: 30, cost: 3000 },
 ];
 
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.1, delayChildren: 0.05 },
+  },
+};
+
+const cardVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: { duration: 0.45, ease: "easeOut" as const },
+  },
+};
+
+const doraContainerVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.07, delayChildren: 0.1 },
+  },
+};
+
+const doraCardVariants = {
+  hidden: { y: 14, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: { duration: 0.35, ease: "easeOut" as const },
+  },
+};
+
 export default function CtoDashboard() {
   return (
-    <div className="flex flex-col gap-6 w-full">
+    <motion.div
+      className="flex flex-col gap-6 w-full"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+    >
       {/* Bento Dials Header */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <motion.div
+        className="grid grid-cols-1 md:grid-cols-4 gap-4"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {/* Code Health */}
-        <div className="glass-panel rounded-xl p-5 flex flex-col justify-between">
+        <motion.div
+          className="glass-panel rounded-xl p-5 flex flex-col justify-between"
+          variants={cardVariants}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: "easeOut" as const } }}
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-mono">CODE HEALTH SCORE</span>
             <Heart className="w-4 h-4 text-emerald-400" />
@@ -60,10 +103,14 @@ export default function CtoDashboard() {
           <div className="text-[10px] text-slate-500 font-mono mt-2">
             Up 4.1% over last 30 days
           </div>
-        </div>
+        </motion.div>
 
         {/* Tech Debt Hours */}
-        <div className="glass-panel rounded-xl p-5 flex flex-col justify-between">
+        <motion.div
+          className="glass-panel rounded-xl p-5 flex flex-col justify-between"
+          variants={cardVariants}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: "easeOut" as const } }}
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-mono">TECH DEBT BURDEN</span>
             <Hourglass className="w-4 h-4 text-amber-500" />
@@ -75,10 +122,14 @@ export default function CtoDashboard() {
           <div className="text-[10px] text-slate-500 font-mono mt-2">
             Est. engineering effort required
           </div>
-        </div>
+        </motion.div>
 
         {/* Refactoring ROI */}
-        <div className="glass-panel rounded-xl p-5 flex flex-col justify-between">
+        <motion.div
+          className="glass-panel rounded-xl p-5 flex flex-col justify-between"
+          variants={cardVariants}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: "easeOut" as const } }}
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-mono">AUTO-FIX REFACTORING ROI</span>
             <DollarSign className="w-4 h-4 text-teal-400" />
@@ -90,10 +141,14 @@ export default function CtoDashboard() {
           <div className="text-[10px] text-slate-500 font-mono mt-2">
             Calculated from 43 auto-remediations
           </div>
-        </div>
+        </motion.div>
 
         {/* Deploy Velocity */}
-        <div className="glass-panel rounded-xl p-5 flex flex-col justify-between">
+        <motion.div
+          className="glass-panel rounded-xl p-5 flex flex-col justify-between"
+          variants={cardVariants}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2, ease: "easeOut" as const } }}
+        >
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-mono">MTTR (MEAN TIME TO RECOVER)</span>
             <Zap className="w-4 h-4 text-primary" />
@@ -105,11 +160,16 @@ export default function CtoDashboard() {
           <div className="text-[10px] text-slate-500 font-mono mt-2">
             Industry Benchmark: Elite (&lt; 1 hr)
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Charts Bento grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.35, ease: "easeOut" as const }}
+      >
         {/* Trend Area Chart */}
         <div className="lg:col-span-2 glass-panel rounded-xl p-6 flex flex-col gap-4">
           <div>
@@ -171,38 +231,64 @@ export default function CtoDashboard() {
             </ResponsiveContainer>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* DORA Metrics Panel */}
-      <div className="glass-panel rounded-xl p-6 flex flex-col gap-4">
+      <motion.div
+        className="glass-panel rounded-xl p-6 flex flex-col gap-4"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.5, ease: "easeOut" as const }}
+      >
         <div>
           <h3 className="font-semibold text-slate-200">DORA Metrics Scorecard</h3>
           <span className="text-xs text-slate-500">DevOps Research and Assessment engineering benchmarks</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-          <div className="bg-slate-900/40 border border-white/5 rounded-lg p-4">
+        <motion.div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-2"
+          variants={doraContainerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.div
+            className="bg-slate-900/40 border border-white/5 rounded-lg p-4 transition-colors duration-200 hover:border-primary/20 hover:bg-slate-900/60"
+            variants={doraCardVariants}
+            whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
+          >
             <div className="text-xs text-slate-500 font-mono mb-1">DEPLOYMENT FREQUENCY</div>
             <div className="text-xl font-bold text-slate-200">Multiple / Day</div>
             <div className="text-[10px] text-emerald-400 font-mono mt-1">ELITE</div>
-          </div>
-          <div className="bg-slate-900/40 border border-white/5 rounded-lg p-4">
+          </motion.div>
+          <motion.div
+            className="bg-slate-900/40 border border-white/5 rounded-lg p-4 transition-colors duration-200 hover:border-primary/20 hover:bg-slate-900/60"
+            variants={doraCardVariants}
+            whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
+          >
             <div className="text-xs text-slate-500 font-mono mb-1">LEAD TIME FOR CHANGES</div>
             <div className="text-xl font-bold text-slate-200">&lt; 24 Hours</div>
             <div className="text-[10px] text-emerald-400 font-mono mt-1">ELITE</div>
-          </div>
-          <div className="bg-slate-900/40 border border-white/5 rounded-lg p-4">
+          </motion.div>
+          <motion.div
+            className="bg-slate-900/40 border border-white/5 rounded-lg p-4 transition-colors duration-200 hover:border-primary/20 hover:bg-slate-900/60"
+            variants={doraCardVariants}
+            whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
+          >
             <div className="text-xs text-slate-500 font-mono mb-1">CHANGE FAILURE RATE</div>
             <div className="text-xl font-bold text-slate-200">4.2%</div>
             <div className="text-[10px] text-emerald-400 font-mono mt-1">ELITE</div>
-          </div>
-          <div className="bg-slate-900/40 border border-white/5 rounded-lg p-4">
+          </motion.div>
+          <motion.div
+            className="bg-slate-900/40 border border-white/5 rounded-lg p-4 transition-colors duration-200 hover:border-primary/20 hover:bg-slate-900/60"
+            variants={doraCardVariants}
+            whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
+          >
             <div className="text-xs text-slate-500 font-mono mb-1">TIME TO RESTORE SERVICE</div>
             <div className="text-xl font-bold text-slate-200">1.8 Hours</div>
             <div className="text-[10px] text-primary font-mono mt-1">HIGH</div>
-          </div>
-        </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   );
 }
