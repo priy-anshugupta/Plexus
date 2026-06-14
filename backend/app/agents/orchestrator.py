@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, START, StateGraph
 
 from app.agents.autofix_agent import autofix_agent_node
 from app.agents.code_review_agent import code_review_agent_node
@@ -33,10 +33,10 @@ def create_agent_workflow() -> StateGraph:
     workflow.add_node("code_reviewer", code_review_agent_node)
     workflow.add_node("autofix_generator", autofix_agent_node)
 
-    # 2. Wire nodes (Linear pipeline)
-    workflow.set_entry_point("security_analyser")
-    workflow.add_edge("security_analyser", "code_reviewer")
-    workflow.add_edge("code_reviewer", "autofix_generator")
+    # 2. Fan out read-only analysis, then join before the write-capable fixer.
+    workflow.add_edge(START, "security_analyser")
+    workflow.add_edge(START, "code_reviewer")
+    workflow.add_edge(["security_analyser", "code_reviewer"], "autofix_generator")
     workflow.add_edge("autofix_generator", END)
 
     # 3. Compile the graph
@@ -104,4 +104,5 @@ def run_analysis_pipeline(
             "review_comments": [],
             "fix_suggestions": [],
             "status": "failed",
+            "error": str(exc),
         }

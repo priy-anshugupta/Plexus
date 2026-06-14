@@ -7,7 +7,8 @@ findings, review suggestions, and auto-fix suggestions throughout the pipeline.
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+import operator
+from typing import Annotated, Any, TypedDict
 
 
 class AgentState(TypedDict):
@@ -21,7 +22,7 @@ class AgentState(TypedDict):
     file_path: str
     code_content: str
     language: str
-    findings: list[dict[str, Any]]
-    review_comments: list[dict[str, Any]]
-    fix_suggestions: list[dict[str, Any]]
+    findings: Annotated[list[dict[str, Any]], operator.add]
+    review_comments: Annotated[list[dict[str, Any]], operator.add]
+    fix_suggestions: Annotated[list[dict[str, Any]], operator.add]
     status: str

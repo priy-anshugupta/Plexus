@@ -58,6 +58,8 @@ class Settings(BaseSettings):
 
     # --- LLM Providers ---
     openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    agent_max_source_chars: int = 120_000
     anthropic_api_key: str = ""
 
     # --- GitHub App ---

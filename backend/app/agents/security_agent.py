@@ -9,6 +9,7 @@ Includes a static rules engine fallback for offline execution.
 from __future__ import annotations
 
 import logging
+from typing import Any
 from uuid import uuid4
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.agents.state import AgentState
 from app.services.scanner_service import ScannerService
+from app.services.privacy_service import PrivacyService
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +60,7 @@ class SecurityReportSchema(BaseModel):
 # Agent Node Function
 # ---------------------------------------------------------------------------
 
-def security_agent_node(state: AgentState) -> dict[str, any]:
+def security_agent_node(state: AgentState) -> dict[str, Any]:
     """LangGraph node representing the Security Agent.
 
     Inspects code using GPT models to find issues, falling back to static
@@ -72,10 +74,18 @@ def security_agent_node(state: AgentState) -> dict[str, any]:
     repo_id_str = state.get("repository_id", "")
 
     # 1. Try AI Analysis if key is available
-    if settings.openai_api_key:
+    cloud_allowed = (
+        settings.openai_api_key
+        and len(code) <= settings.agent_max_source_chars
+        and not PrivacyService().contains_sensitive_data(code)
+    )
+    if settings.openai_api_key and not cloud_allowed:
+        logger.info("Cloud security analysis skipped for sensitive or oversized source: %s", file_path)
+
+    if cloud_allowed:
         try:
             llm = ChatOpenAI(
-                model="gpt-4o-mini",
+                model=settings.openai_model,
                 temperature=0.0,
                 openai_api_key=settings.openai_api_key,
             )

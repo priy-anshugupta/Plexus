@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.agents.state import AgentState
+from app.services.privacy_service import PrivacyService
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,7 @@ class CodeReviewReportSchema(BaseModel):
 # Agent Node Function
 # ---------------------------------------------------------------------------
 
-def code_review_agent_node(state: AgentState) -> dict[str, any]:
+def code_review_agent_node(state: AgentState) -> dict[str, Any]:
     """LangGraph node representing the Code Review Agent.
 
     Inspects code using GPT models to find style and maintainability concerns,
@@ -64,10 +66,18 @@ def code_review_agent_node(state: AgentState) -> dict[str, any]:
     file_path = state.get("file_path", "")
 
     # 1. Try AI Analysis if key is available
-    if settings.openai_api_key:
+    cloud_allowed = (
+        settings.openai_api_key
+        and len(code) <= settings.agent_max_source_chars
+        and not PrivacyService().contains_sensitive_data(code)
+    )
+    if settings.openai_api_key and not cloud_allowed:
+        logger.info("Cloud code review skipped for sensitive or oversized source: %s", file_path)
+
+    if cloud_allowed:
         try:
             llm = ChatOpenAI(
-                model="gpt-4o-mini",
+                model=settings.openai_model,
                 temperature=0.0,
                 openai_api_key=settings.openai_api_key,
             )

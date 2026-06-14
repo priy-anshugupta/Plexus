@@ -9,6 +9,7 @@ Includes a rule-based template builder fallback for offline execution.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.agents.state import AgentState
+from app.services.privacy_service import PrivacyService
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,7 @@ class AutoFixReportSchema(BaseModel):
 # Agent Node Function
 # ---------------------------------------------------------------------------
 
-def autofix_agent_node(state: AgentState) -> dict[str, any]:
+def autofix_agent_node(state: AgentState) -> dict[str, Any]:
     """LangGraph node representing the Auto-Fix Agent.
 
     Generates code refactoring suggestions for any critical/high findings,
@@ -72,10 +74,18 @@ def autofix_agent_node(state: AgentState) -> dict[str, any]:
         return {"fix_suggestions": []}
 
     # 1. Try AI Generation if key is available
-    if settings.openai_api_key:
+    cloud_allowed = (
+        settings.openai_api_key
+        and len(code) <= settings.agent_max_source_chars
+        and not PrivacyService().contains_sensitive_data(code)
+    )
+    if settings.openai_api_key and not cloud_allowed:
+        logger.info("Cloud auto-fix skipped for sensitive or oversized source: %s", file_path)
+
+    if cloud_allowed:
         try:
             llm = ChatOpenAI(
-                model="gpt-4o-mini",
+                model=settings.openai_model,
                 temperature=0.0,
                 openai_api_key=settings.openai_api_key,
             )

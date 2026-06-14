@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import MonacoEditor, { EditorProps } from "@monaco-editor/react";
+import MonacoEditor, { type Monaco, type OnMount } from "@monaco-editor/react";
+import type { editor } from "monaco-editor";
 
 interface CodeViewerProps {
   code: string;
@@ -10,7 +11,9 @@ interface CodeViewerProps {
 }
 
 export default function CodeViewer({ code, filePath, highlightLine }: CodeViewerProps) {
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const decorationIds = useRef<string[]>([]);
 
   // Detect file language based on file extension
   const getLanguage = (path: string) => {
@@ -32,8 +35,9 @@ export default function CodeViewer({ code, filePath, highlightLine }: CodeViewer
     }
   };
 
-  const handleEditorDidMount = (editor: any, monaco: any) => {
-    editorRef.current = editor;
+  const handleEditorDidMount: OnMount = (mountedEditor, monaco) => {
+    editorRef.current = mountedEditor;
+    monacoRef.current = monaco;
 
     // Apply custom styling themes if needed
     monaco.editor.defineTheme("plexus-dark", {
@@ -53,7 +57,7 @@ export default function CodeViewer({ code, filePath, highlightLine }: CodeViewer
     }
   };
 
-  const scrollToLine = (line: number, monacoInstance?: any) => {
+  const scrollToLine = (line: number, monacoInstance?: Monaco) => {
     if (!editorRef.current) return;
     
     const editor = editorRef.current;
@@ -64,15 +68,9 @@ export default function CodeViewer({ code, filePath, highlightLine }: CodeViewer
     editor.focus();
 
     // Add visual decoration/marker to line
-    const monaco = monacoInstance || (window as any).monaco;
+    const monaco = monacoInstance || monacoRef.current;
     if (monaco) {
-      // Clear previous decorations if any
-      const currentDecorations = editor.getValueDecorations() || [];
-      const decoIds = currentDecorations
-        .filter((d: any) => d.options.className === "vuln-line-highlight")
-        .map((d: any) => d.id);
-      
-      editor.deltaDecorations(decoIds, [
+      decorationIds.current = editor.deltaDecorations(decorationIds.current, [
         {
           range: new monaco.Range(line, 1, line, 1),
           options: {
