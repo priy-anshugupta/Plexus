@@ -1,7 +1,7 @@
 import { AbilityBuilder, createMongoAbility, MongoAbility } from "@casl/ability";
 
 export type Action = "read" | "create" | "update" | "delete" | "manage";
-export type Subject = "all" | "CisoDashboard" | "CtoDashboard" | "QuestDashboard" | "ComplianceMetrics" | "RiskScores" | "TechDebtCharts" | "SandboxQuests" | "RemediationPanel";
+export type Subject = "all" | "CisoDashboard" | "CtoDashboard" | "QuestDashboard" | "SoloDashboard" | "ComplianceMetrics" | "RiskScores" | "TechDebtCharts" | "SandboxQuests" | "RemediationPanel" | "PersonalScans" | "CodeQuality";
 
 export type AppAbility = MongoAbility<[Action, Subject]>;
 
@@ -31,6 +31,14 @@ export function defineAbilityFor(role: string): AppAbility {
     // Junior devs see the gamified onboarding quests, sandbox task cards, and basic dashboard.
     can("read", "QuestDashboard");
     can("read", "SandboxQuests");
+    cannot("read", "ComplianceMetrics");
+    cannot("read", "TechDebtCharts");
+    cannot("read", "RemediationPanel");
+  } else if (role === "solo_dev") {
+    // Solo developers get personal scanning, code quality, and dependency health.
+    can("read", "SoloDashboard");
+    can("read", "PersonalScans");
+    can("read", "CodeQuality");
     cannot("read", "ComplianceMetrics");
     cannot("read", "TechDebtCharts");
     cannot("read", "RemediationPanel");
