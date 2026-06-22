@@ -245,6 +245,40 @@ class GraphService:
             logger.error("Failed to build Neo4j graph for %s: %s", file_path, exc)
 
     # ------------------------------------------------------------------
+    # Query Context
+    # ------------------------------------------------------------------
+
+    def get_file_context(self, repo_id: UUID, file_path: str, hop_depth: int = 2) -> list[dict]:
+        """Fetch multi-hop dependency context for a file from Neo4j.
+
+        Returns nodes and relationships within N hops of the target file.
+        """
+        if not self.is_connected:
+            return []
+
+        query = """
+        MATCH (f:File {repo_id: $repo_id, path: $file_path})
+        OPTIONAL MATCH path = (f)-[*1..$hop_depth]-(related)
+        WITH f, related, relationships(path) as rels
+        RETURN {
+            source: f.path,
+            target: related.path,
+            target_type: labels(related)[0],
+            target_name: related.name,
+            relationships: [r in rels | type(r)]
+        } as ctx
+        LIMIT 50
+        """
+        params = {"repo_id": str(repo_id), "file_path": file_path, "hop_depth": hop_depth}
+        try:
+            with db_manager.get_neo4j_session() as session:
+                result = session.run(query, params)
+                return [record["ctx"] for record in result if record["ctx"]]
+        except Exception as exc:
+            logger.error("Failed to get file context from Neo4j: %s", exc)
+            return []
+
+    # ------------------------------------------------------------------
     # Helper to clean module names
     # ------------------------------------------------------------------
 
