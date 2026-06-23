@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import type { ForceGraphMethods, LinkObject, NodeObject } from "react-force-graph-2d";
-import { ZoomIn, RefreshCw, Route } from "lucide-react";
+import { ZoomIn, RefreshCw, Route, Loader2 } from "lucide-react";
+import { api } from "../lib/api";
 
 // Load react-force-graph-2d dynamically with ssr: false to prevent Next.js build errors
 const ForceGraph2D = dynamic(
@@ -26,61 +27,125 @@ export interface GraphLink {
 }
 
 interface BlastRadiusGraphProps {
+  nodes?: GraphNode[];
+  links?: GraphLink[];
+  vulnerabilityNodeId?: string;
+  scanId?: string; // If provided, fetch real graph data from API
+}
+
+export default function BlastRadiusGraph({
+  nodes: initialNodes = [],
+  links: initialLinks = [],
+  vulnerabilityNodeId,
+  scanId,
+}: BlastRadiusGraphProps) {
+  const [graphNodes, setGraphNodes] = useState<GraphNode[]>(initialNodes);
+  const [graphLinks, setGraphLinks] = useState<GraphLink[]>(initialLinks);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch real graph data when scanId changes
+  useEffect(() => {
+    if (!scanId) {
+      setGraphNodes(initialNodes);
+      setGraphLinks(initialLinks);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api
+      .blastRadius(scanId)
+      .then((data) => {
+        if (cancelled) return;
+        setGraphNodes(data.nodes || []);
+        setGraphLinks(data.links || []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.message || "Failed to load graph");
+        // Fallback to initial data if fetch fails
+        setGraphNodes(initialNodes);
+        setGraphLinks(initialLinks);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scanId, initialNodes, initialLinks]);
+
+  return (
+    <GraphCanvas
+      nodes={graphNodes}
+      links={graphLinks}
+      vulnerabilityNodeId={vulnerabilityNodeId}
+      loading={loading}
+      error={error}
+    />
+  );
+}
+
+interface GraphCanvasProps {
   nodes: GraphNode[];
   links: GraphLink[];
   vulnerabilityNodeId?: string;
+  loading: boolean;
+  error: string | null;
 }
 
-type RuntimeNode = NodeObject & GraphNode & { val: number };
-
-const linkNodeId = (endpoint: unknown) =>
-  typeof endpoint === "object" && endpoint !== null && "id" in endpoint
-    ? String((endpoint as { id?: string | number }).id)
-    : String(endpoint);
-
-export default function BlastRadiusGraph({
-  nodes,
-  links,
-  vulnerabilityNodeId,
-}: BlastRadiusGraphProps) {
-  const calculateBlastRadius = (startNodeId: string) => {
-    const reachable = new Set<string>([startNodeId]);
-    const activeLinks = new Set<string>();
-    const queue = [startNodeId];
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      links.forEach((link) => {
-        const sourceId = linkNodeId(link.source);
-        const targetId = linkNodeId(link.target);
-        if (sourceId === current && !reachable.has(targetId)) {
-          reachable.add(targetId);
-          activeLinks.add(`${sourceId}->${targetId}`);
-          queue.push(targetId);
-        }
-      });
-    }
-    return { reachable, activeLinks };
-  };
-
-  const initialRadius = vulnerabilityNodeId
-    ? calculateBlastRadius(vulnerabilityNodeId)
-    : { reachable: new Set<string>(), activeLinks: new Set<string>() };
+function GraphCanvas({ nodes, links, vulnerabilityNodeId, loading, error }: GraphCanvasProps) {
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
   const [selectedNode, setSelectedNode] = useState<string | null>(vulnerabilityNodeId || null);
-  const [highlightNodes, setHighlightNodes] = useState<Set<string>>(initialRadius.reachable);
-  const [highlightLinks, setHighlightLinks] = useState<Set<string>>(initialRadius.activeLinks);
+  const [highlightNodes, setHighlightNodes] = useState<Set<string>>(new Set());
+  const [highlightLinks, setHighlightLinks] = useState<Set<string>>(new Set());
 
-  // Generate node colors based on type and severity
+  const linkNodeId = (endpoint: unknown) =>
+    typeof endpoint === "object" && endpoint !== null && "id" in endpoint
+      ? String((endpoint as { id?: string | number }).id)
+      : String(endpoint);
+
+  const calculateBlastRadius = useCallback(
+    (startNodeId: string) => {
+      const reachable = new Set<string>([startNodeId]);
+      const activeLinks = new Set<string>();
+      const queue = [startNodeId];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        links.forEach((link) => {
+          const sourceId = linkNodeId(link.source);
+          const targetId = linkNodeId(link.target);
+          if (sourceId === current && !reachable.has(targetId)) {
+            reachable.add(targetId);
+            activeLinks.add(`${sourceId}->${targetId}`);
+            queue.push(targetId);
+          }
+        });
+      }
+      return { reachable, activeLinks };
+    },
+    [links]
+  );
+
+  useEffect(() => {
+    if (vulnerabilityNodeId) {
+      const radius = calculateBlastRadius(vulnerabilityNodeId);
+      setHighlightNodes(radius.reachable);
+      setHighlightLinks(radius.activeLinks);
+    } else {
+      setHighlightNodes(new Set());
+      setHighlightLinks(new Set());
+    }
+  }, [vulnerabilityNodeId, calculateBlastRadius]);
+
   const getNodeColor = (node: GraphNode, isHighlighted: boolean) => {
     if (selectedNode && !isHighlighted && node.id !== selectedNode) {
       return "rgba(90, 94, 79, 0.18)";
     }
-
     if (node.id === selectedNode) return "#ff655d";
-
     switch (node.type) {
       case "vulnerability":
         return "#ff655d";
@@ -97,24 +162,17 @@ export default function BlastRadiusGraph({
     }
   };
 
-  // Perform BFS traversal to compute downstream blast radius
-  const computeBlastRadius = (startNodeId: string) => {
-    const radius = calculateBlastRadius(startNodeId);
-    setHighlightNodes(radius.reachable);
-    setHighlightLinks(radius.activeLinks);
-  };
-
   const handleNodeClick = (rawNode: NodeObject) => {
-    const node = rawNode as RuntimeNode;
+    const node = rawNode as GraphNode & { x: number; y: number };
     if (selectedNode === node.id) {
-      // Toggle off
       setSelectedNode(null);
       setHighlightNodes(new Set());
       setHighlightLinks(new Set());
     } else {
       setSelectedNode(node.id);
-      computeBlastRadius(node.id);
-      // Center camera on node
+      const radius = calculateBlastRadius(node.id);
+      setHighlightNodes(radius.reachable);
+      setHighlightLinks(radius.activeLinks);
       if (fgRef.current) {
         fgRef.current.centerAt(node.x, node.y, 400);
         fgRef.current.zoom(2.5, 400);
@@ -144,7 +202,6 @@ export default function BlastRadiusGraph({
     return () => observer.disconnect();
   }, []);
 
-  // Memoize graph data to avoid recalculations
   const graphData = useMemo(() => {
     return {
       nodes: nodes.map((n) => ({ ...n, val: n.type === "vulnerability" ? 15 : n.type === "api" ? 12 : 8 })),
@@ -171,6 +228,20 @@ export default function BlastRadiusGraph({
           <ZoomIn className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Loading overlay */}
+      {loading && (
+        <div className="absolute inset-0 z-20 bg-[#090a08]/80 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      )}
+
+      {/* Error overlay */}
+      {error && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-rose-500/10 border border-rose-500/20 text-rose-400 px-4 py-2 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Legend overlay */}
       <div className="absolute top-4 right-4 z-10 bg-[#0c0e0a]/90 border border-white/10 p-3 rounded-lg text-xs font-mono flex flex-col gap-2 pointer-events-none">
@@ -205,14 +276,14 @@ export default function BlastRadiusGraph({
             height={dimensions.height}
             graphData={graphData}
             nodeLabel={(rawNode: NodeObject) => {
-              const node = rawNode as RuntimeNode;
+              const node = rawNode as GraphNode & { x: number; y: number };
               return `${node.type.toUpperCase()}: ${node.name}`;
             }}
             nodeColor={(rawNode: NodeObject) => {
-              const node = rawNode as RuntimeNode;
+              const node = rawNode as GraphNode;
               return getNodeColor(node, highlightNodes.has(node.id));
             }}
-            nodeVal={(rawNode: NodeObject) => (rawNode as RuntimeNode).val}
+            nodeVal={(rawNode: NodeObject) => (rawNode as GraphNode).val || 8}
             linkWidth={(link: LinkObject) => {
               const sourceId = linkNodeId(link.source);
               const targetId = linkNodeId(link.target);
@@ -233,7 +304,7 @@ export default function BlastRadiusGraph({
             linkDirectionalParticleWidth={(link: LinkObject) => {
               const sourceId = linkNodeId(link.source);
               const targetId = linkNodeId(link.target);
-                return highlightLinks.has(`${sourceId}->${targetId}`) ? 2.4 : 0;
+              return highlightLinks.has(`${sourceId}->${targetId}`) ? 2.4 : 0;
             }}
             linkDirectionalParticleColor={() => "#ff655d"}
             onNodeClick={handleNodeClick}
@@ -242,22 +313,21 @@ export default function BlastRadiusGraph({
             d3VelocityDecay={0.32}
             backgroundColor="#090a08"
             nodeCanvasObject={(rawNode: NodeObject, ctx, globalScale) => {
-              const node = rawNode as RuntimeNode;
+              const node = rawNode as GraphNode & { x: number; y: number; val: number };
               const label = node.name;
               const fontSize = 11 / globalScale;
               const x = node.x ?? 0;
               const y = node.y ?? 0;
               ctx.font = `${fontSize}px monospace`;
-              
               const r = node.val;
               ctx.save();
               ctx.shadowBlur = selectedNode === node.id ? 18 : 8;
               ctx.shadowColor = getNodeColor(node, highlightNodes.has(node.id));
               ctx.beginPath();
               if (node.type === "vulnerability") {
-                ctx.rect(x - r * .72, y - r * .72, r * 1.44, r * 1.44);
+                ctx.rect(x - r * 0.72, y - r * 0.72, r * 1.44, r * 1.44);
               } else if (node.type === "file") {
-                ctx.roundRect(x - r * .8, y - r * .65, r * 1.6, r * 1.3, 2);
+                ctx.roundRect(x - r * 0.8, y - r * 0.65, r * 1.6, r * 1.3, 2);
               } else {
                 ctx.arc(x, y, r, 0, 2 * Math.PI, false);
               }
@@ -265,7 +335,6 @@ export default function BlastRadiusGraph({
               ctx.fill();
               ctx.restore();
 
-              // Add a glow ring to the selected node
               if (selectedNode === node.id || (node.type === "vulnerability" && !selectedNode)) {
                 ctx.beginPath();
                 ctx.arc(x, y, r + 4, 0, 2 * Math.PI, false);
@@ -274,7 +343,6 @@ export default function BlastRadiusGraph({
                 ctx.stroke();
               }
 
-              // Text labeling (only show if zoom is close enough or node is selected)
               if (globalScale > 1.2 || selectedNode === node.id) {
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
