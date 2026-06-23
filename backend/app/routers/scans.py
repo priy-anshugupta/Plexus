@@ -11,6 +11,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi.responses import StreamingResponse
 
 from app.core.database import get_db
 from app.middleware.error_handler import NotFoundException
@@ -18,6 +19,7 @@ from app.schemas import ScanListResponse, ScanResponse, ScanTrigger
 from app.services.repository_service import RepositoryService
 from app.services.scan_service import ScanService
 from app.services.scanner_service import ScannerService
+from app.services.event_bus import scan_event_bus
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -42,7 +44,6 @@ def trigger_scan(
     db: Session = Depends(get_db),
 ) -> ScanResponse:
     """Initiate a security and code quality scan on a registered repository."""
-    # First verify that the repository exists
     repo_service = RepositoryService(db)
     repo = repo_service.get_by_id(data.repository_id)
     if repo is None:
@@ -55,6 +56,38 @@ def trigger_scan(
     background_tasks.add_task(scanner_service.run_scan, scan.id)
     
     return scan
+
+
+@router.get(
+    "/{scan_id}/stream",
+    summary="Stream real-time scan progress via SSE",
+)
+async def stream_scan(
+    scan_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Server-Sent Events stream of scan progress updates.
+    
+    Emits events: started, file_progress, agent_progress, completed, failed, cancelled.
+    """
+    scan_service = ScanService(db)
+    scan = scan_service.get_by_id(scan_id)
+    if scan is None:
+        raise NotFoundException(f"Scan with ID {scan_id} not found.")
+
+    async def event_generator():
+        async for event in scan_event_bus.subscribe(str(scan_id)):
+            yield event
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get(
