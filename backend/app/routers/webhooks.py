@@ -21,12 +21,12 @@ router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 scanner_service = ScannerService()
 
 
-async def run_background_scan(clone_url: str, branch: str) -> None:
+def run_background_scan(clone_url: str, branch: str) -> None:
     """Clones and scans a repository in a background process to avoid blocking the webhook response."""
     try:
         logger.info("Starting background scan for %s on branch %s", clone_url, branch)
         # We invoke the scan_repo pipeline which walks files, parses ASTs, and audits.
-        await scanner_service.scan_repo(clone_url, branch)
+        scanner_service.scan_repo(clone_url, branch)
         logger.info("Background scan completed successfully for %s", clone_url)
     except Exception as exc:
         logger.error("Error during background scan for %s: %s", clone_url, exc)
