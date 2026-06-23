@@ -16,6 +16,7 @@ from uuid import UUID
 from app.core.database import db_manager
 from app.models.finding import Finding, FindingCategory, FindingStatus, Severity
 from app.models.scan import Scan, ScanStatus
+from app.schemas import RepositoryCreate, ScanTrigger
 from app.services.git_service import GitService
 from app.services.parser_service import ParserService
 from app.services.graph_service import GraphService
@@ -48,15 +49,25 @@ class ScannerService:
     # ------------------------------------------------------------------
 
     def run_scan(self, scan_id: UUID) -> None:
-        """Executes a code scan asynchronously.
+        """Executes a code scan asynchronously with real-time event streaming.
 
         Fetches the scan target, clones the workspace, scans all code files
         via the AST parsing engine, records findings, and cleans up the temp dir.
-
-        Args:
-            scan_id: UUID of the Scan record to run.
         """
-        # We open a new dedicated DB session for the background worker thread
+        import asyncio
+        from app.services.event_bus import scan_event_bus
+
+        async def _emit(event: str, message: str, progress: float | None = None, extra: dict | None = None):
+            payload = {"event": event, "message": message}
+            if progress is not None:
+                payload["progress"] = progress
+            if extra:
+                payload.update(extra)
+            try:
+                await scan_event_bus.publish(str(scan_id), payload)
+            except Exception as exc:
+                logger.debug("Event publish failed: %s", exc)
+
         with db_manager.get_db_session() as db:
             scan = db.get(Scan, scan_id)
             if not scan:
@@ -69,6 +80,7 @@ class ScannerService:
                 scan.status = ScanStatus.FAILED
                 scan.error_message = "Associated repository not found."
                 db.commit()
+                asyncio.run(_emit("failed", "Repository not found"))
                 return
 
             # 1. Update state to RUNNING
@@ -76,10 +88,12 @@ class ScannerService:
             scan.started_at = datetime.utcnow()
             db.commit()
             logger.info("Scan %s started running on repo %s", scan_id, repo_record.full_name)
+            asyncio.run(_emit("started", f"Scan started on {repo_record.full_name}", progress=0.0))
 
             temp_dir = None
             try:
                 # 2. Clone repository to temp folder
+                asyncio.run(_emit("progress", "Cloning repository...", progress=5.0))
                 temp_dir = self._git_service.clone_repo(
                     clone_url=repo_record.clone_url,
                     branch=scan.branch,
@@ -96,163 +110,176 @@ class ScannerService:
 
                 # 3. Walk through local cloned directory and analyze files
                 findings_found: list[Finding] = []
+                target_files = []
                 for root, _, files in os.walk(temp_dir):
-                    # Skip hidden directories like .git
                     if ".git" in root.split(os.sep):
                         continue
-
                     for file in files:
                         file_ext = os.path.splitext(file)[1].lower()
-                        if file_ext not in (".py", ".js", ".jsx", ".ts", ".tsx"):
-                            continue
+                        if file_ext in (".py", ".js", ".jsx", ".ts", ".tsx"):
+                            target_files.append(os.path.join(root, file))
 
-                        full_path = os.path.join(root, file)
-                        # Derive relative file path inside repository
-                        relative_path = os.path.relpath(full_path, temp_dir)
+                total_files = len(target_files)
+                asyncio.run(_emit("progress", f"Found {total_files} files to scan", progress=10.0))
 
-                        try:
-                            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
-                                code_content = f.read()
+                for file_idx, full_path in enumerate(target_files):
+                    file_ext = os.path.splitext(full_path)[1].lower()
+                    relative_path = os.path.relpath(full_path, temp_dir)
+                    progress = 10.0 + (file_idx / max(total_files, 1)) * 80.0
+                    asyncio.run(_emit("file_progress", f"Scanning {relative_path}", progress=progress, extra={"file": relative_path}))
 
-                            lang = "python" if file_ext == ".py" else "javascript"
-                            
-                            # Parse code using AST parser
-                            ast_data = self._parser_service.parse_code(code_content, lang)
-                            
-                            # 1. Update Graph Database (Neo4j)
-                            self._graph_service.upsert_file_graph(
-                                repo_id=repo_record.id,
-                                file_path=relative_path,
-                                ast_data=ast_data,
-                            )
-                            
-                            # 2. Update Vector Database (Qdrant)
-                            self._vector_service.upsert_file_chunks(
-                                repo_id=repo_record.id,
-                                file_path=relative_path,
-                                code_content=code_content,
-                            )
+                    try:
+                        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                            code_content = f.read()
 
-                            # 3. Analyze code using AI Agent Pipeline (falls back to static rules if offline)
-                            from app.agents import run_analysis_pipeline
+                        lang = "python" if file_ext == ".py" else "javascript"
+                        
+                        # Parse code using AST parser
+                        ast_data = self._parser_service.parse_code(code_content, lang)
+                        
+                        # 1. Update Graph Database (Neo4j)
+                        self._graph_service.upsert_file_graph(
+                            repo_id=repo_record.id,
+                            file_path=relative_path,
+                            ast_data=ast_data,
+                        )
+                        
+                        # 2. Update Vector Database (Qdrant)
+                        self._vector_service.upsert_file_chunks(
+                            repo_id=repo_record.id,
+                            file_path=relative_path,
+                            code_content=code_content,
+                        )
 
-                            file_lines = code_content.splitlines()
-                            def get_snippet(start: int, end: int | None = None) -> str:
-                                start_idx = max(0, start - 1)
-                                end_idx = min(len(file_lines), (end or start))
-                                return "\n".join(file_lines[start_idx:end_idx])
+                        # 3. Analyze code using AI Agent Pipeline
+                        from app.agents import run_analysis_pipeline
 
-                            pipeline_result = run_analysis_pipeline(
-                                repository_id=repo_record.id,
-                                file_path=relative_path,
+                        file_lines = code_content.splitlines()
+                        def get_snippet(start: int, end: int | None = None) -> str:
+                            start_idx = max(0, start - 1)
+                            end_idx = min(len(file_lines), (end or start))
+                            return "\n".join(file_lines[start_idx:end_idx])
+
+                        asyncio.run(_emit("agent_progress", f"Running agents on {relative_path}", progress=progress, extra={"file": relative_path, "stage": "agents"}))
+
+                        pipeline_result = run_analysis_pipeline(
+                            repository_id=repo_record.id,
+                            file_path=relative_path,
+                            code_content=code_content,
+                            language=lang,
+                        )
+
+                        if pipeline_result.get("status") == "success":
+                            # New 10-agent pipeline returns triaged_findings
+                            agent_findings = pipeline_result.get("findings", [])
+                            agent_comments = pipeline_result.get("review_comments", [])
+                            fix_suggestions = pipeline_result.get("fix_suggestions", [])
+                            threat_model = pipeline_result.get("threat_model", {})
+                            agent_outputs = pipeline_result.get("agent_outputs", {})
+
+                            if threat_model:
+                                logger.info("[Scanner] Threat model risk score: %s", threat_model.get("risk_score", "N/A"))
+
+                            # A. Map triaged security findings
+                            for f in agent_findings:
+                                line_start = f.get("line_start", 1)
+                                line_end = f.get("line_end", line_start)
+                                severity_str = f.get("severity", "info").lower()
+
+                                # Match suggestion
+                                matching_sug = None
+                                for s in fix_suggestions:
+                                    if s.get("finding_title") == f.get("title") and s.get("line_start") == line_start:
+                                        matching_sug = s
+                                        break
+
+                                sug_text = f.get("suggestion")
+                                if matching_sug:
+                                    sug_text = (
+                                        f"### Recommended Fix:\n"
+                                        f"```\n{matching_sug['corrected_code']}\n```\n\n"
+                                        f"**Explanation:** {matching_sug['explanation']}"
+                                    )
+
+                                findings_found.append(
+                                    Finding(
+                                        scan_id=scan.id,
+                                        repository_id=repo_record.id,
+                                        file_path=relative_path,
+                                        line_start=line_start,
+                                        line_end=line_end,
+                                        severity=Severity(f.get("severity", "info").lower()),
+                                        category=FindingCategory.SECURITY,
+                                        status=FindingStatus.OPEN,
+                                        title=f.get("title", "Security Vulnerability"),
+                                        description=f.get("description", ""),
+                                        suggestion=sug_text,
+                                        code_snippet=get_snippet(line_start, line_end),
+                                        rule_id=f.get("rule_id"),
+                                        confidence_score=f.get("confidence_score", 0.85),
+                                        is_ai_generated=f.get("is_ai_generated", False),
+                                    )
+                                )
+
+                            # B. Map code quality review comments
+                            for c in agent_comments:
+                                line_start = c.get("line", 1)
+
+                                # Match suggestion
+                                matching_sug = None
+                                for s in fix_suggestions:
+                                    if s.get("finding_title") == c.get("title") and s.get("line_start") == line_start:
+                                        matching_sug = s
+                                        break
+
+                                sug_text = c.get("suggestion")
+                                if matching_sug:
+                                    sug_text = (
+                                        f"### Recommended Refactoring:\n"
+                                        f"```\n{matching_sug['corrected_code']}\n```\n\n"
+                                        f"**Explanation:** {matching_sug['explanation']}"
+                                    )
+
+                                severity_str = c.get("severity", "info").lower()
+                                if severity_str == "error":
+                                    sev_val = Severity.HIGH
+                                elif severity_str == "warning":
+                                    sev_val = Severity.MEDIUM
+                                else:
+                                    sev_val = Severity.INFO
+
+                                findings_found.append(
+                                    Finding(
+                                        scan_id=scan.id,
+                                        repository_id=repo_record.id,
+                                        file_path=relative_path,
+                                        line_start=line_start,
+                                        line_end=line_start,
+                                        severity=sev_val,
+                                        category=FindingCategory.CODE_QUALITY,
+                                        status=FindingStatus.OPEN,
+                                        title=c.get("title", "Code Quality Issue"),
+                                        description=c.get("description", ""),
+                                        suggestion=sug_text,
+                                        code_snippet=get_snippet(line_start, line_start),
+                                        rule_id=None,
+                                        confidence_score=0.8,
+                                        is_ai_generated=c.get("is_ai_generated", False),
+                                    )
+                                )
+                        else:
+                            logger.warning("AI Pipeline execution failed for %s. Falling back to static rules.", relative_path)
+                            file_findings = self._analyze_file(
+                                relative_path=relative_path,
                                 code_content=code_content,
                                 language=lang,
+                                scan_id=scan.id,
+                                repo_id=repo_record.id,
+                                ast_data=ast_data,
                             )
-
-                            if pipeline_result.get("status") == "success":
-                                agent_findings = pipeline_result.get("findings", [])
-                                agent_comments = pipeline_result.get("review_comments", [])
-                                fix_suggestions = pipeline_result.get("fix_suggestions", [])
-
-                                # A. Map security findings
-                                for f in agent_findings:
-                                    line_start = f.get("line_start", 1)
-                                    line_end = f.get("line_end", line_start)
-
-                                    # Match suggestion
-                                    matching_sug = None
-                                    for s in fix_suggestions:
-                                        if s.get("finding_title") == f.get("title") and s.get("line_start") == line_start:
-                                            matching_sug = s
-                                            break
-
-                                    sug_text = f.get("suggestion")
-                                    if matching_sug:
-                                        sug_text = (
-                                            f"### Recommended Fix:\n"
-                                            f"```\n{matching_sug['corrected_code']}\n```\n\n"
-                                            f"**Explanation:** {matching_sug['explanation']}"
-                                        )
-
-                                    findings_found.append(
-                                        Finding(
-                                            scan_id=scan.id,
-                                            repository_id=repo_record.id,
-                                            file_path=relative_path,
-                                            line_start=line_start,
-                                            line_end=line_end,
-                                            severity=Severity(f.get("severity", "info").lower()),
-                                            category=FindingCategory.SECURITY,
-                                            status=FindingStatus.OPEN,
-                                            title=f.get("title", "Security Vulnerability"),
-                                            description=f.get("description", ""),
-                                            suggestion=sug_text,
-                                            code_snippet=get_snippet(line_start, line_end),
-                                            rule_id=f.get("rule_id"),
-                                            confidence_score=f.get("confidence_score", 0.85),
-                                            is_ai_generated=f.get("is_ai_generated", False),
-                                        )
-                                    )
-
-                                # B. Map code quality review comments
-                                for c in agent_comments:
-                                    line_start = c.get("line", 1)
-
-                                    # Match suggestion
-                                    matching_sug = None
-                                    for s in fix_suggestions:
-                                        if s.get("finding_title") == c.get("title") and s.get("line_start") == line_start:
-                                            matching_sug = s
-                                            break
-
-                                    sug_text = c.get("suggestion")
-                                    if matching_sug:
-                                        sug_text = (
-                                            f"### Recommended Refactoring:\n"
-                                            f"```\n{matching_sug['corrected_code']}\n```\n\n"
-                                            f"**Explanation:** {matching_sug['explanation']}"
-                                        )
-
-                                    severity_str = c.get("severity", "info").lower()
-                                    if severity_str == "error":
-                                        sev_val = Severity.HIGH
-                                    elif severity_str == "warning":
-                                        sev_val = Severity.MEDIUM
-                                    else:
-                                        sev_val = Severity.INFO
-
-                                    findings_found.append(
-                                        Finding(
-                                            scan_id=scan.id,
-                                            repository_id=repo_record.id,
-                                            file_path=relative_path,
-                                            line_start=line_start,
-                                            line_end=line_start,
-                                            severity=sev_val,
-                                            category=FindingCategory.CODE_QUALITY,
-                                            status=FindingStatus.OPEN,
-                                            title=c.get("title", "Code Quality Issue"),
-                                            description=c.get("description", ""),
-                                            suggestion=sug_text,
-                                            code_snippet=get_snippet(line_start, line_start),
-                                            rule_id=None,
-                                            confidence_score=0.8,
-                                            is_ai_generated=c.get("is_ai_generated", False),
-                                        )
-                                    )
-                            else:
-                                logger.warning("AI Pipeline execution failed for %s. Falling back to static rules.", relative_path)
-                                file_findings = self._analyze_file(
-                                    relative_path=relative_path,
-                                    code_content=code_content,
-                                    language=lang,
-                                    scan_id=scan.id,
-                                    repo_id=repo_record.id,
-                                    ast_data=ast_data,
-                                )
-                                findings_found.extend(file_findings)
-                        except Exception as exc:
-                            logger.warning("Failed to scan file %s: %s", relative_path, exc)
+                            findings_found.extend(file_findings)
+                    except Exception as exc:
+                        logger.warning("Failed to scan file %s: %s", relative_path, exc)
 
                 # 4. Save findings to PostgreSQL
                 for f in findings_found:
@@ -276,6 +303,7 @@ class ScannerService:
                     scan.id,
                     len(findings_found),
                 )
+                asyncio.run(_emit("completed", f"Scan completed with {len(findings_found)} findings", progress=100.0, extra={"findings_count": len(findings_found)}))
 
             except Exception as exc:
                 logger.exception("Error executing scan %s: %s", scan_id, exc)
@@ -287,6 +315,7 @@ class ScannerService:
                     scan.duration_seconds = (scan.completed_at - scan.started_at).total_seconds()
                 scan.error_message = str(exc)
                 db.commit()
+                asyncio.run(_emit("failed", f"Scan failed: {str(exc)}", progress=100.0, extra={"error": str(exc)}))
 
             finally:
                 # 6. Cleanup clone directory workspace
@@ -493,3 +522,43 @@ class ScannerService:
                 )
 
         return findings
+
+
+    # ------------------------------------------------------------------
+    # Webhook convenience
+    # ------------------------------------------------------------------
+
+    def scan_repo(self, clone_url: str, branch: str = "main") -> UUID:
+        """Create a repository (if needed), trigger a scan, and run it synchronously.
+
+        Used by GitHub webhooks to auto-scan on push/PR events.
+        Returns the scan ID so the caller can track progress via SSE.
+        """
+        from app.models.repository import Repository
+        from app.schemas import ScanTrigger
+        from app.services.scan_service import ScanService
+        from app.services.repository_service import RepositoryService
+
+        with db_manager.get_db_session() as db:
+            repo_svc = RepositoryService(db)
+            scan_svc = ScanService(db)
+
+            # Find or create repository by clone_url
+            repo = db.query(Repository).filter(Repository.clone_url == clone_url).first()
+            if not repo:
+                name = clone_url.rstrip("/").split("/")[-1].replace(".git", "")
+                repo = repo_svc.create_repo(
+                    data=RepositoryCreate(name=name, full_name=name, clone_url=clone_url)
+                )
+                db.commit()
+
+            # Create scan
+            scan = scan_svc.trigger_scan(
+                data=ScanTrigger(repository_id=str(repo.id), scan_type="full", branch=branch),
+                user_id=None,  # System triggered
+            )
+            db.commit()
+
+            # Run scan synchronously in the same thread (webhook background task)
+            self.run_scan(scan.id)
+            return scan.id
