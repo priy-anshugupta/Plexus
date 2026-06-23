@@ -96,14 +96,15 @@ def register_error_handlers(app: FastAPI) -> None:
         exc: PlexusException,
     ) -> JSONResponse:
         """Handle known Plexus domain exceptions."""
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "error": type(exc).__name__,
-                "detail": exc.detail,
-                "status_code": exc.status_code,
-            },
-        )
+        request_id = getattr(request.state, "request_id", None)
+        content = {
+            "error": type(exc).__name__,
+            "detail": exc.detail,
+            "status_code": exc.status_code,
+        }
+        if request_id:
+            content["request_id"] = request_id
+        return JSONResponse(status_code=exc.status_code, content=content)
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
@@ -111,14 +112,15 @@ def register_error_handlers(app: FastAPI) -> None:
         exc: RequestValidationError,
     ) -> JSONResponse:
         """Handle Pydantic / FastAPI request-validation errors."""
-        return JSONResponse(
-            status_code=422,
-            content={
-                "error": "ValidationError",
-                "detail": str(exc.errors()),
-                "status_code": 422,
-            },
-        )
+        request_id = getattr(request.state, "request_id", None)
+        content = {
+            "error": "ValidationError",
+            "detail": str(exc.errors()),
+            "status_code": 422,
+        }
+        if request_id:
+            content["request_id"] = request_id
+        return JSONResponse(status_code=422, content=content)
 
     @app.exception_handler(Exception)
     async def generic_exception_handler(
@@ -126,12 +128,13 @@ def register_error_handlers(app: FastAPI) -> None:
         exc: Exception,
     ) -> JSONResponse:
         """Catch-all for unhandled exceptions — log and return 500."""
-        logger.exception("Unhandled exception on %s %s", request.method, request.url)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "InternalServerError",
-                "detail": "An unexpected error occurred.",
-                "status_code": 500,
-            },
-        )
+        request_id = getattr(request.state, "request_id", None)
+        logger.exception("Unhandled exception on %s %s (req=%s)", request.method, request.url, request_id)
+        content = {
+            "error": "InternalServerError",
+            "detail": "An unexpected error occurred.",
+            "status_code": 500,
+        }
+        if request_id:
+            content["request_id"] = request_id
+        return JSONResponse(status_code=500, content=content)
