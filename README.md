@@ -292,3 +292,7 @@ Plexus represents a practical implementation of **state-of-the-art AI patterns**
 * **Graph-Constrained RAG:** Combines hierarchical graph extraction (using Tree-sitter AST nodes) with semantic embeddings, enabling LLMs to execute structured reasoning over highly relational code structures.
 * **Pregel Actor Model Orchestration:** Implements parallel multi-agent collaboration with state persistence (checkpoints) to handle long-running code analysis processes reliably.
 * **Telemetry & Continuous Integration:** Features webhook ingestion pipelines that turn static analysis into an active, feedback-driven ML Ops loop.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
